@@ -50,7 +50,7 @@ const validateSignUp = (schema) => async(req, res, next) => {
         next()
 
     } catch (e) {
-        res.status(400).json({error: e.errors.join(", ")})
+        res.status(422).json({error: e.errors.join(", ")})
 
     }
     
@@ -133,11 +133,16 @@ app.get("/users", tokenIsValid, (req,res) => {
 })
 
 app.put("/users/:uuid/password", tokenIsValid, async (req,res) => {
+
     const { uuid } = req.params
     const { password } = req.body
     const token = req.headers.authorization.split(" ")[1]
     const user = usersDb.find((userDb) => userDb.uuid === uuid)
 
+    if (!user) {
+        res.statusCode = 404
+        res.send({error:"User not found"})
+    }
 
     const isTheOwner = jwt.verify(token, config.secret, ( _err, decoded) => {
 
@@ -148,22 +153,24 @@ app.put("/users/:uuid/password", tokenIsValid, async (req,res) => {
     })  
     
     if (!isTheOwner) {
-        res.status(403).json({error:"You cant change a password of another user"})
+
+        return res.status(403).json({error:"You cant change a password of another user"})
+    } 
+
+    if ( isTheOwner ) {
+        const newPassword = await bcrypt.hash(password, SALT)
+        user.password = newPassword
+    
+        const newDb = usersDb.filter((userDb)=> userDb.uuid !== uuid)
+        newDb.push(user)
+    
+        usersDb = newDb
+    
+        res.statusCode = 204
+        res.send('')
     }
 
-    if (!user) {
-        res.statusCode = 404
-        res.send({error:"User not found"})
-    }
 
-    const newPassword = await bcrypt.hash(password, SALT)
-    user.password = newPassword
 
-    const newDb = usersDb.filter((userDb)=> userDb.uuid !== uuid)
-    newDb.push(user)
-
-    usersDb = newDb
-
-    res.statusCode = 204
-    res.send('')
+    
 })
